@@ -1,13 +1,11 @@
 [project]
 name = "app"
 version = "0.1.0"
-description = "TBD"
+description = "Detect outliers in univariate time series data using XGBoost"
 requires-python = ">=3.13"
 dependencies = [
     "numpy>=2.1.3",
     "pandas>=2.2.3",
-    "polars>=1.15.0",
-    "scipy>=1.14.1",
     "scikit-learn>=1.5.2",
     "xgboost>=2.1.3",
     "pydantic>=2.10.2",
@@ -20,7 +18,6 @@ dev = [
     "ruff>=0.7.4",
     "mypy>=1.13.0",
     "pandas-stubs>=2.2.3.241009",
-    "scipy-stubs>=1.14.1.3",
     "pytest>=8.3.3",
     "ipykernel>=6.29.5",
 ]
@@ -30,7 +27,7 @@ requires = ["setuptools>=75.5"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 line-length = 100
 select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
 

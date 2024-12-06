@@ -1,5 +1,4 @@
-"""Visual comparison of the outlier detection performance of RPCA, MCD, FFT, and SST
-on a sample univariate time series dataset."""
+"""Detect outliers in univariate time series data using XGBoost."""
 
 # %%
 # Imports
@@ -43,38 +42,101 @@ def generate_time_series() -> dict[str, pd.DataFrame]:
 
 
 # %% [markdown]
-# 2. Apply XGBoost-based outlier detection methods to the univariate time series data.
+# # 2. Apply XGBoost-based outlier detection methods to the univariate time series data.
+# How to handle periodic spikes in the time series:
+
+# 1. **Added Periodic Features**
+# ```python
+# df_features["is_month_start"] = df_features["date"].dt.is_month_start.astype(int)
+# df_features["is_year_start"] = df_features["date"].dt.is_year_start.astype(int)
+# ```
+# These binary indicators explicitly capture the first days of months and years where spikes
+# may occur.
+
+# 2. **Dynamic Threshold System**
+# ```python
+# base_threshold = np.mean(residuals) + 3 * np.std(residuals)
+# threshold_multiplier = np.ones(len(df))
+# ```
+# Instead of a single fixed threshold, we now have a base threshold that gets adjusted dynamically.
+
+# 3. **Adaptive Threshold Adjustment**
+# ```python
+# if df[month_start_mask]["daily_total"].mean() > df["daily_total"].mean() * 1.5:
+#     threshold_multiplier[month_start_mask] = 2.0
+# if df[year_start_mask]["daily_total"].mean() > df["daily_total"].mean() * 2.0:
+#     threshold_multiplier[year_start_mask] = 3.0
+# ```
+# This is the key change. The code:
+# - Checks if month starts show significantly higher values (>50% higher than overall mean)
+# - Checks if year starts show significantly higher values (>100% higher than overall mean)
+# - Adjusts thresholds accordingly by multiplying them by 2.0 or 3.0
+
+# 4. **Final Outlier Detection**
+# ```python
+# dynamic_thresholds = base_threshold * threshold_multiplier
+# df["is_outlier"] = residuals > dynamic_thresholds
+# ```
+# Applies the customized thresholds to each point based on its temporal characteristics.
+
+# This approach maintains the algorithm's effectiveness for regular time series while
+# preventing false positives on legitimate periodic spikes.
 
 
 # %%
 def detect_outliers(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Detect outliers in a univariate time series using XGBoost.
+    Detect outliers in a univariate time series using XGBoost, accounting for periodic patterns.
 
     Args:
-        df (pd.DataFrame): Input DataFrame with columns 'dataset', 'date', and 'daily_total'.
+        df (pd.DataFrame): Input DataFrame with columns 'date' and 'daily_total'.
 
     Returns:
         pd.DataFrame: Original DataFrame with an additional 'is_outlier' column indicating
         whether each data point is an outlier.
     """
-    # Prepare the data
-    X = df["date"].values.reshape(-1, 1)
-    y = df["daily_total"].values
+    # Create periodic features
+    df_features = df.copy()
+    df_features["day_of_month"] = df_features["date"].dt.day
+    df_features["day_of_year"] = df_features["date"].dt.day_of_year
+    df_features["is_month_start"] = df_features["date"].dt.is_month_start.astype(int)
+    df_features["is_year_start"] = df_features["date"].dt.is_year_start.astype(int)
+
+    # Prepare features for XGBoost
+    feature_cols = ["day_of_month", "day_of_year", "is_month_start", "is_year_start"]
+    X = df_features[feature_cols].values
+    y = df_features["daily_total"].values
+
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # Train the XGBoost model
-    model = XGBRegressor(objective="reg:squarederror", random_state=42)
+    # Train XGBoost model with periodic features
+    model = XGBRegressor(
+        objective="reg:squarederror", random_state=42, n_estimators=100, learning_rate=0.1
+    )
     model.fit(X_scaled, y)
 
-    # Predict on the scaled input and calculate the residuals
+    # Predict and calculate residuals
     y_pred = model.predict(X_scaled)
     residuals = np.abs(y - y_pred)
 
-    # Identify outliers based on the residuals
-    threshold = np.mean(residuals) + 3 * np.std(residuals)
-    df["is_outlier"] = residuals > threshold
+    # Calculate dynamic thresholds based on date characteristics
+    base_threshold = np.mean(residuals) + 3 * np.std(residuals)
+
+    # Adjust threshold for month/year starts
+    threshold_multiplier = np.ones(len(df))
+    month_start_mask = df_features["is_month_start"] == 1
+    year_start_mask = df_features["is_year_start"] == 1
+
+    # Increase threshold for month/year starts if periodic pattern exists
+    if df[month_start_mask]["daily_total"].mean() > df["daily_total"].mean() * 1.5:
+        threshold_multiplier[month_start_mask] = 2.0
+    if df[year_start_mask]["daily_total"].mean() > df["daily_total"].mean() * 2.0:
+        threshold_multiplier[year_start_mask] = 3.0
+
+    # Apply dynamic thresholds
+    dynamic_thresholds = base_threshold * threshold_multiplier
+    df["is_outlier"] = residuals > dynamic_thresholds
 
     return df
 
@@ -190,13 +252,16 @@ if __name__ == "__main__":
     sheet_name = "dataset_c"
     time_series = df[sheet_name]["daily_total"].values
 
-    # Example usage
-    outlier_df = detect_outliers(df[sheet_name])
-    print(f"Number of outliers detected: {outlier_df['is_outlier'].sum()}")
+    for sheet_name, df_sheet_name in df.items():
+        outlier_df_sheet_name = detect_outliers(df_sheet_name)
+        print(f"Number of outliers detected: {outlier_df_sheet_name['is_outlier'].sum()}")
 
-    # Plot the time series data with or without outliers
-    fig = plot_time_series(
-        outlier_df, "Time Series with Outliers", sheet_name, outlier_df["is_outlier"]
-    )
-    fig.show()
-    fig.write_html("plots/time_series_outliers.html")
+        # Plot the time series data with or without outliers
+        fig = plot_time_series(
+            outlier_df_sheet_name,
+            f"Time Series with Outliers for {sheet_name}",
+            sheet_name,
+            outlier_df_sheet_name["is_outlier"],
+        )
+        fig.show()
+        fig.write_html(f"plots/time_series_outliers_{sheet_name}.html")
