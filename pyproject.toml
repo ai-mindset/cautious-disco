@@ -8,7 +8,7 @@ dependencies = [
     "pandas>=2.2.3",
     "scikit-learn>=1.5.2",
     "xgboost>=2.1.3",
-    "pydantic>=2.10.2",
+    "pydantic>=2.9.0", # Avoiding version conflicts
     "plotly>=5.24.1",
     "openpyxl>=3.1.5",
 ]
@@ -16,8 +16,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff>=0.7.4",
-    "mypy>=1.13.0",
+    "pyright>=1.1.391",
     "pandas-stubs>=2.2.3.241009",
+    "ipdb>=0.13.13",
     "pytest>=8.3.3",
     "ipykernel>=6.29.5",
 ]

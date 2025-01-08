@@ -11,6 +11,8 @@ import plotly.graph_objects as go
 from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 
+import ipdb
+
 # %% [markdown]
 # 1. Load the sample univariate time series data.
 
@@ -96,6 +98,7 @@ def detect_outliers(df: pd.DataFrame) -> pd.DataFrame:
         whether each data point is an outlier.
     """
     # Create periodic features
+    df["date"] = pd.to_datetime(df["date"], format="mixed")
     df_features = df.copy()
     df_features["day_of_month"] = df_features["date"].dt.day
     df_features["day_of_year"] = df_features["date"].dt.day_of_year
@@ -173,37 +176,7 @@ def plot_time_series(
             go.Scatter(
                 x=df["date"],
                 y=df["daily_total"],
-                mode="lines",
-                name=f"Time Series for {sheet_name}",
-            )
-        )
-
-        # Add outlier markers if provided
-        if outliers is not None:
-            outlier_dates = df["date"][outliers]
-            outlier_values = df["daily_total"][outliers]
-
-            fig.add_trace(
-                go.Scatter(
-                    x=outlier_dates,
-                    y=outlier_values,
-                    mode="markers",
-                    name="Outliers",
-                    marker=dict(
-                        symbol="x",
-                        size=10,
-                        color="orange",
-                        line=dict(width=2),
-                    ),
-                )
-            )
-
-        # Add hovertemplate to both traces
-        fig.add_trace(
-            go.Scatter(
-                x=df["date"],
-                y=df["daily_total"],
-                mode="lines",
+                mode="markers",
                 name=f"Time Series for {sheet_name}",
                 hovertemplate="Date: %{x|%B %d, %Y}<br>" + "Value: %{y:.2f}<br><extra></extra>",
             )
@@ -247,21 +220,37 @@ def plot_time_series(
 
 # %%
 if __name__ == "__main__":
+    # Load synthetic example
+    df = pd.read_csv("./synthetic_data.csv")
+    time_series = df["daily_total"].to_numpy() if "daily_total" in df.columns else None
+    sheet_name = "synthetic_dataset"
+    outlier_df = detect_outliers(df)
+
+    # Plot the time series data with or without outliers
+    fig = plot_time_series(
+        outlier_df,
+        f"Time Series with Outliers for {sheet_name}",
+        sheet_name,
+        outlier_df["is_outlier"],
+    )
+    fig.show()
+    fig.write_html(f"plots/time_series_outliers_{sheet_name}.html")
+
     # Load the sample univariate time series data
-    df = generate_time_series()
-    sheet_name = "dataset_c"
-    time_series = df[sheet_name]["daily_total"].values
+    # df = generate_time_series()
+    # sheet_name = "dataset_c"
+    # time_series = df[sheet_name]["daily_total"].values
 
-    for sheet_name, df_sheet_name in df.items():
-        outlier_df_sheet_name = detect_outliers(df_sheet_name)
-        print(f"Number of outliers detected: {outlier_df_sheet_name['is_outlier'].sum()}")
+    # for _, df_sheet_name in df.items():
+    #     outlier_df_sheet_name = detect_outliers(df_sheet_name)
+    #     print(f"Number of outliers detected: {outlier_df_sheet_name['is_outlier'].sum()}")
 
-        # Plot the time series data with or without outliers
-        fig = plot_time_series(
-            outlier_df_sheet_name,
-            f"Time Series with Outliers for {sheet_name}",
-            sheet_name,
-            outlier_df_sheet_name["is_outlier"],
-        )
-        fig.show()
-        fig.write_html(f"plots/time_series_outliers_{sheet_name}.html")
+    #     # Plot the time series data with or without outliers
+    #     fig = plot_time_series(
+    #         outlier_df_sheet_name,
+    #         f"Time Series with Outliers for {sheet_name}",
+    #         sheet_name,
+    #         outlier_df_sheet_name["is_outlier"],
+    #     )
+    #     fig.show()
+    #     fig.write_html(f"plots/time_series_outliers_{sheet_name}.html")
